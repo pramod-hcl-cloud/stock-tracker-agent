@@ -1,7 +1,7 @@
 """
 Vertex AI Quantitative Agent Research Summary Generator
 Formulates structured markdown intelligence reports grounded in exact technical calculations
-with asset-specific currency formatting (INR for India, CAD for Canada/US).
+with asset-specific currency formatting and light-mode compatible color tokens.
 """
 
 
@@ -14,11 +14,11 @@ def render_vertex_agent_markdown(signals: dict, meta: dict) -> str:
     name = meta.get('name', asset_key)
     symbol = meta.get('symbol', asset_key)
     exchange = meta.get('exchange', 'Global')
-    base_curr = meta.get('base_currency', 'USD')
     target_curr = meta.get('target_currency', 'CAD')
     curr_sym = meta.get('currency_symbol', '$')
     hedged_label = meta.get('hedged_label', '')
     is_cad_hedged = meta.get('is_cad_hedged', False)
+    is_forex = meta.get('is_forex', False)
     fx_multiplier = meta.get('fx_multiplier', 1.0)
 
     price = signals['curr_price']
@@ -81,7 +81,10 @@ def render_vertex_agent_markdown(signals: dict, meta: dict) -> str:
     # Volume profile narrative
     vol_ratio = signals['vol_ratio']
     vol_confirmation = signals['vol_confirmation']
-    vol_commentary = f"Current trading volume is tracking at **{vol_ratio * 100:.1f}%** of the 20-day average volume ({vol_confirmation})."
+    if is_forex:
+        vol_commentary = "Currency exchange rate stream (continuous interbank quoting)."
+    else:
+        vol_commentary = f"Current trading volume is tracking at **{vol_ratio * 100:.1f}%** of the 20-day average volume ({vol_confirmation})."
 
     # Support / Resistance / Risk metrics
     sup = signals['recent_swing_low']
@@ -90,7 +93,9 @@ def render_vertex_agent_markdown(signals: dict, meta: dict) -> str:
     target_1 = res * 1.025 if signals['trend_bias'] in ["BULLISH", "LEAN_BULLISH"] else sup * 0.975
 
     # Currency architecture disclosure
-    if target_curr == "INR":
+    if is_forex:
+        curr_section = f"💱 **Currency Exchange Rate**: Tracking live interbank exchange rates for **1 Canadian Dollar (CAD) = {price:.4f} Indian Rupees (INR)**."
+    elif target_curr == "INR":
         curr_section = f"🇮🇳 **Native Indian Rupee Listing**: Quoted and analyzed directly in native **Indian Rupees (`₹ INR`)** on the **National Stock Exchange of India (`NSE`)**."
     elif is_cad_hedged:
         price_local = signals.get('curr_price_local', price / fx_multiplier)
@@ -114,7 +119,7 @@ def render_vertex_agent_markdown(signals: dict, meta: dict) -> str:
 ---
 
 #### 🎯 Strategic Quant Verdict
-> **Action Recommendation**: <span style="font-size: 1.15em; font-weight: 700; color: {signals['action_color']};">{signals['verdict']}</span>  
+> **Action Recommendation**: <span style="font-size: 1.15em; font-weight: 600; color: {signals['action_color']};">{signals['verdict']}</span>  
 > **Confidence Rating**: `{signals['quant_score']}% Composite Model Probability`  
 > **Tactical Guidance**: {signals['recommended_action']}
 

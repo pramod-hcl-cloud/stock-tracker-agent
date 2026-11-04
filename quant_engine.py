@@ -1,7 +1,8 @@
 """
 Quantitative Engine for Technical Analysis, Multi-Currency FX Hedging, and Signal Generation.
 Configured for:
-- India Equities (HDFCBANK, HCLTECH) -> Displayed in Native INR (₹)
+- India Equities (HDFCBANK, HCLTECH, TITAN) -> Displayed in Native INR (₹)
+- Forex Exchange Pair (CAD to INR) -> Displayed in Native INR (₹ per 1 CAD)
 - Canada Equities (Shopify) -> Displayed in Native CAD ($)
 - US Equities (Berkshire Hathaway, AAPL, United Healthcare) -> Displayed in CAD Hedged ($)
 """
@@ -21,68 +22,114 @@ TRACKED_STOCKS = {
     "HDFCBANK": {
         "symbol": "HDFCBANK.NS",
         "display_name": "HDFCBANK (HDFC Bank - India)",
+        "short_name": "HDFCBANK",
         "company": "HDFC Bank Ltd.",
         "base_currency": "INR",
         "target_currency": "INR",
         "currency_symbol": "₹",
         "exchange": "NSE (India)",
         "hedged_label": "Native INR",
-        "is_cad_hedged": False
+        "is_cad_hedged": False,
+        "is_forex": False,
+        "flag": "🇮🇳"
     },
     "HCLTECH": {
         "symbol": "HCLTECH.NS",
         "display_name": "HCLTECH (HCL Technologies - India)",
+        "short_name": "HCLTECH",
         "company": "HCL Technologies Ltd.",
         "base_currency": "INR",
         "target_currency": "INR",
         "currency_symbol": "₹",
         "exchange": "NSE (India)",
         "hedged_label": "Native INR",
-        "is_cad_hedged": False
+        "is_cad_hedged": False,
+        "is_forex": False,
+        "flag": "🇮🇳"
+    },
+    "TITAN": {
+        "symbol": "TITAN.NS",
+        "display_name": "TITAN (Titan Company - India)",
+        "short_name": "TITAN",
+        "company": "Titan Company Ltd.",
+        "base_currency": "INR",
+        "target_currency": "INR",
+        "currency_symbol": "₹",
+        "exchange": "NSE (India)",
+        "hedged_label": "Native INR",
+        "is_cad_hedged": False,
+        "is_forex": False,
+        "flag": "🇮🇳"
+    },
+    "CAD to INR": {
+        "symbol": "CADINR=X",
+        "display_name": "CAD to INR (Exchange Rate)",
+        "short_name": "CAD / INR",
+        "company": "Canadian Dollar to Indian Rupee",
+        "base_currency": "CAD",
+        "target_currency": "INR",
+        "currency_symbol": "₹",
+        "exchange": "FOREX",
+        "hedged_label": "1 CAD in INR",
+        "is_cad_hedged": False,
+        "is_forex": True,
+        "flag": "💱"
     },
     "Shopify": {
         "symbol": "SHOP.TO",
         "display_name": "Shopify (SHOP - TSX)",
+        "short_name": "Shopify",
         "company": "Shopify Inc.",
         "base_currency": "CAD",
         "target_currency": "CAD",
         "currency_symbol": "$",
         "exchange": "TSX (Canada)",
         "hedged_label": "Native CAD",
-        "is_cad_hedged": False
+        "is_cad_hedged": False,
+        "is_forex": False,
+        "flag": "🇨🇦"
     },
     "Berkshire Hathaway": {
         "symbol": "BRK-B",
         "display_name": "Berkshire Hathaway (BRK-B)",
+        "short_name": "Berkshire",
         "company": "Berkshire Hathaway Inc. (Class B)",
         "base_currency": "USD",
         "target_currency": "CAD",
         "currency_symbol": "$",
         "exchange": "NYSE (USA)",
         "hedged_label": "CAD Hedged",
-        "is_cad_hedged": True
+        "is_cad_hedged": True,
+        "is_forex": False,
+        "flag": "🇺🇸"
     },
     "AAPL": {
         "symbol": "AAPL",
         "display_name": "AAPL (Apple Inc.)",
+        "short_name": "Apple",
         "company": "Apple Inc.",
         "base_currency": "USD",
         "target_currency": "CAD",
         "currency_symbol": "$",
         "exchange": "NASDAQ (USA)",
         "hedged_label": "CAD Hedged",
-        "is_cad_hedged": True
+        "is_cad_hedged": True,
+        "is_forex": False,
+        "flag": "🇺🇸"
     },
     "United Healthcare": {
         "symbol": "UNH",
         "display_name": "United Healthcare (UNH)",
+        "short_name": "UnitedHealth",
         "company": "UnitedHealth Group Inc.",
         "base_currency": "USD",
         "target_currency": "CAD",
         "currency_symbol": "$",
         "exchange": "NYSE (USA)",
         "hedged_label": "CAD Hedged",
-        "is_cad_hedged": True
+        "is_cad_hedged": True,
+        "is_forex": False,
+        "flag": "🇺🇸"
     }
 }
 
@@ -97,13 +144,13 @@ def get_usdcad_fx_rate() -> float:
             return float(hist['Close'].iloc[-1])
     except Exception:
         pass
-    return 1.4150  # Sturdy institutional fallback
+    return 1.4150  # Institutional fallback
 
 
 def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, dict]:
     """
     Fetches market data from yfinance, applies currency conversion / hedging
-    according to asset specification (HDFC & HCLTech in INR, Shopify in CAD, US in CAD Hedged),
+    according to asset specification (HDFC, HCLTech, TITAN, CAD/INR in INR, Shopify in CAD, US in CAD Hedged),
     and computes the quantitative technical indicators:
     - EMA12 = Close.ewm(span=12, adjust=False).mean()
     - EMA26 = Close.ewm(span=26, adjust=False).mean()
@@ -119,10 +166,13 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
         target_curr = cfg["target_currency"]
         curr_sym = cfg["currency_symbol"]
         display_name = cfg["display_name"]
+        short_name = cfg.get("short_name", asset_key)
         company = cfg["company"]
         exchange = cfg["exchange"]
         hedged_label = cfg["hedged_label"]
         is_cad_hedged = cfg["is_cad_hedged"]
+        is_forex = cfg.get("is_forex", False)
+        flag = cfg.get("flag", "🌐")
     else:
         # Fallback for custom ticker entry
         symbol = asset_key.strip().upper()
@@ -130,10 +180,13 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
         target_curr = "USD"
         curr_sym = "$"
         display_name = symbol
+        short_name = symbol
         company = symbol
         exchange = "Global Equity"
         hedged_label = "Native USD"
         is_cad_hedged = False
+        is_forex = False
+        flag = "🌐"
 
     fetch_period = "3mo" if period in ["3m", "3mo"] else period
 
@@ -153,6 +206,12 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
 
+    # Clean volume for Forex or zero-volume assets
+    if 'Volume' not in df.columns or df['Volume'].isna().all():
+        df['Volume'] = 0.0
+    else:
+        df['Volume'] = df['Volume'].fillna(0.0)
+
     # Preserve raw local prices
     df['Close_Local'] = df['Close']
     df['Open_Local'] = df['Open']
@@ -162,8 +221,8 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
     # -------------------------------------------------------------
     # CURRENCY CONVERSION / HEDGING ENGINE
     # -------------------------------------------------------------
-    # For HDFCBANK & HCLTECH: target is INR -> multiplier = 1.0 (Stay in pure INR)
-    # For Shopify: target is CAD -> multiplier = 1.0 (Native CAD)
+    # For HDFCBANK, HCLTECH, TITAN, CAD to INR: multiplier = 1.0 (Stay in pure INR)
+    # For Shopify: multiplier = 1.0 (Native CAD)
     # For Berkshire Hathaway, AAPL, United Healthcare: USD -> CAD Hedged via USDCAD=X
     if is_cad_hedged and base_curr == "USD" and target_curr == "CAD":
         fx_multiplier = get_usdcad_fx_rate()
@@ -176,7 +235,7 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
 
     # -------------------------------------------------------------
     # BASE QUANTITATIVE DATA LOGIC (Strictly conforming to user spec)
-    # Calculated on the display Close series (in INR for Indian stocks, CAD for Canadian/US stocks)
+    # Calculated on the display Close series
     # -------------------------------------------------------------
     df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
     df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
@@ -198,7 +257,7 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
     df['RSI'] = 100.0 - (100.0 / (1.0 + rs))
     df['RSI'] = df['RSI'].fillna(50.0)
 
-    # Institutional moving averages
+    # Moving averages & volume profiling
     df['SMA50'] = df['Close'].rolling(window=min(50, len(df)), min_periods=1).mean()
     df['Vol_MA20'] = df['Volume'].rolling(window=min(20, len(df)), min_periods=1).mean()
 
@@ -206,18 +265,90 @@ def fetch_stock_data(asset_key: str, period: str = "3m") -> tuple[pd.DataFrame, 
         "asset_key": asset_key,
         "symbol": symbol,
         "name": company,
+        "company": company,
         "display_name": display_name,
+        "short_name": short_name,
         "base_currency": base_curr,
         "target_currency": target_curr,
         "currency_symbol": curr_sym,
         "fx_multiplier": fx_multiplier,
         "is_cad_hedged": is_cad_hedged,
+        "is_forex": is_forex,
         "exchange": exchange,
         "hedged_label": hedged_label,
+        "flag": flag,
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
     return df, meta
+
+
+def get_all_overview_tiles(period: str = "3mo") -> list[dict]:
+    """
+    Fetches the overview tile metrics (price, change, percentage, range)
+    for all tracked assets to populate the minimalist top landing grid.
+    """
+    tiles = []
+    for key in TRACKED_STOCKS.keys():
+        try:
+            df, meta = fetch_stock_data(key, period=period)
+            if len(df) >= 2:
+                latest = df.iloc[-1]
+                prev = df.iloc[-2]
+                curr_p = float(latest['Close'])
+                prev_p = float(prev['Close'])
+                chg_abs = curr_p - prev_p
+                chg_pct = (chg_abs / prev_p) * 100.0 if prev_p != 0 else 0.0
+                period_hi = float(df['High'].max())
+                period_lo = float(df['Low'].min())
+                
+                # Mini sparkline data (last 15 points)
+                sparkline = df['Close'].tail(15).tolist()
+
+                tiles.append({
+                    "key": key,
+                    "symbol": meta["symbol"],
+                    "short_name": meta["short_name"],
+                    "display_name": meta["display_name"],
+                    "company": meta["company"],
+                    "curr_price": curr_p,
+                    "prev_price": prev_p,
+                    "change_abs": chg_abs,
+                    "change_pct": chg_pct,
+                    "currency_symbol": meta["currency_symbol"],
+                    "target_currency": meta["target_currency"],
+                    "exchange": meta["exchange"],
+                    "hedged_label": meta["hedged_label"],
+                    "flag": meta["flag"],
+                    "is_forex": meta.get("is_forex", False),
+                    "period_high": period_hi,
+                    "period_low": period_lo,
+                    "sparkline": sparkline
+                })
+        except Exception as e:
+            # Fallback safe tile if network transiently drops for one ticker
+            cfg = TRACKED_STOCKS[key]
+            tiles.append({
+                "key": key,
+                "symbol": cfg["symbol"],
+                "short_name": cfg.get("short_name", key),
+                "display_name": cfg["display_name"],
+                "company": cfg["company"],
+                "curr_price": 0.0,
+                "prev_price": 0.0,
+                "change_abs": 0.0,
+                "change_pct": 0.0,
+                "currency_symbol": cfg["currency_symbol"],
+                "target_currency": cfg["target_currency"],
+                "exchange": cfg["exchange"],
+                "hedged_label": cfg["hedged_label"],
+                "flag": cfg.get("flag", "🌐"),
+                "is_forex": cfg.get("is_forex", False),
+                "period_high": 0.0,
+                "period_low": 0.0,
+                "sparkline": []
+            })
+    return tiles
 
 
 def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -> dict:
@@ -234,7 +365,7 @@ def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -
     curr_price = float(latest['Close'])
     prev_price = float(prev['Close'])
     change_abs = curr_price - prev_price
-    change_pct = (change_abs / prev_price) * 100.0
+    change_pct = (change_abs / prev_price) * 100.0 if prev_price != 0 else 0.0
 
     curr_price_local = float(latest['Close_Local'])
     prev_price_local = float(prev['Close_Local'])
@@ -278,16 +409,16 @@ def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -
     rsi_curr = float(latest['RSI'])
     if rsi_curr >= 70:
         rsi_zone = "OVERBOUGHT (Exhaustion Warning)"
-        rsi_badge_color = "#FF453A"
+        rsi_badge_color = "#DC2626"
     elif rsi_curr <= 30:
         rsi_zone = "OVERSOLD (Rebound Opportunity)"
-        rsi_badge_color = "#30D158"
+        rsi_badge_color = "#16A34A"
     elif rsi_curr >= 50:
         rsi_zone = "BULLISH EXPANSION CORRIDOR (50-70)"
-        rsi_badge_color = "#00F5A0"
+        rsi_badge_color = "#059669"
     else:
         rsi_zone = "BEARISH DRIFT CORRIDOR (30-50)"
-        rsi_badge_color = "#FF9F0A"
+        rsi_badge_color = "#D97706"
 
     # 3. Moving Average Alignment
     ema12_curr = float(latest['EMA12'])
@@ -305,13 +436,19 @@ def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -
         trend_regime = "CHOPPY / CONSOLIDATION PHASE"
         trend_bias = "NEUTRAL"
 
-    # 4. Volume Confirmation
+    # 4. Volume Confirmation (Forex handles zero-volume smoothly)
     vol_curr = float(latest['Volume'])
     vol_ma = float(latest['Vol_MA20'])
-    vol_ratio = (vol_curr / vol_ma) if vol_ma > 0 else 1.0
-    vol_confirmation = "HIGH VOLUME SURGE" if vol_ratio >= 1.25 else (
-        "BELOW AVERAGE VOLUME" if vol_ratio <= 0.75 else "NORMAL INSTITUTIONAL VOLUME"
-    )
+    is_forex = meta.get("is_forex", False) if meta else False
+
+    if is_forex or vol_ma == 0:
+        vol_ratio = 1.0
+        vol_confirmation = "FOREX QUOTE STREAM (Tick Volume)"
+    else:
+        vol_ratio = (vol_curr / vol_ma) if vol_ma > 0 else 1.0
+        vol_confirmation = "HIGH VOLUME SURGE" if vol_ratio >= 1.25 else (
+            "BELOW AVERAGE VOLUME" if vol_ratio <= 0.75 else "NORMAL INSTITUTIONAL VOLUME"
+        )
 
     # 5. Key Price Levels
     period_high = float(df['High'].max())
@@ -329,7 +466,8 @@ def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -
     if 45 <= rsi_curr <= 65: score += 10
     elif rsi_curr > 75: score -= 15
     elif rsi_curr < 30: score += 5
-    if vol_ratio >= 1.2: score += (5 if trend_bias in ["BULLISH", "LEAN_BULLISH"] else -5)
+    if not is_forex and vol_ratio >= 1.2:
+        score += (5 if trend_bias in ["BULLISH", "LEAN_BULLISH"] else -5)
 
     score = max(5, min(95, score))
 
@@ -338,23 +476,23 @@ def analyze_quant_signals(df: pd.DataFrame, asset_key: str, meta: dict = None) -
 
     if score >= 75:
         verdict = "STRONG BUY / AGGRESSIVE ACCUMULATION"
-        action_color = "#00F5A0"
+        action_color = "#059669"
         recommended_action = f"Maintain long positioning in {target_curr} with trailing stop below EMA26."
     elif score >= 60:
         verdict = "MODERATE BUY / ACCUMULATE ON PULLBACKS"
-        action_color = "#22C55E"
+        action_color = "#16A34A"
         recommended_action = f"Scale into position near EMA12 dynamic support ({curr_sym}{ema12_curr:,.2f})."
     elif score >= 45:
         verdict = "NEUTRAL / HOLD & CONSOLIDATE"
-        action_color = "#EAB308"
+        action_color = "#D97706"
         recommended_action = "Maintain position; observe support consolidation before adding capital."
     elif score >= 30:
         verdict = "MODERATE SELL / DEFENSIVE DE-RISK"
-        action_color = "#F97316"
+        action_color = "#EA580C"
         recommended_action = "Tighten stop-loss boundaries; de-risk exposure on counter-trend rallies."
     else:
         verdict = "STRONG SELL / CAPITAL PRESERVATION"
-        action_color = "#EF4444"
+        action_color = "#DC2626"
         recommended_action = "Protect capital; downside trend structure intact across key moving averages."
 
     return {

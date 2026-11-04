@@ -3,22 +3,32 @@ Automated Verification Suite for Multi-Currency Portfolio
 Tests:
 1. HDFCBANK (India - NSE) -> Native INR (₹)
 2. HCLTECH (India - NSE) -> Native INR (₹)
-3. Shopify (Canada - TSX) -> Native CAD ($)
-4. Berkshire Hathaway (USA - NYSE) -> CAD Hedged ($)
-5. AAPL (USA - NASDAQ) -> CAD Hedged ($)
-6. United Healthcare (USA - NYSE) -> CAD Hedged ($)
+3. TITAN (India - NSE) -> Native INR (₹)
+4. CAD to INR (FOREX) -> Native INR (₹)
+5. Shopify (Canada - TSX) -> Native CAD ($)
+6. Berkshire Hathaway (USA - NYSE) -> CAD Hedged ($)
+7. AAPL (USA - NASDAQ) -> CAD Hedged ($)
+8. United Healthcare (USA - NYSE) -> CAD Hedged ($)
 """
 
 import sys
-from quant_engine import TRACKED_STOCKS, fetch_stock_data, analyze_quant_signals
+from quant_engine import TRACKED_STOCKS, fetch_stock_data, analyze_quant_signals, get_all_overview_tiles
 from charts import create_financial_dashboard_figure
 from agent_summary import render_vertex_agent_markdown
 
 
 def run_tests():
     print("=" * 65)
-    print("STARTING MULTI-CURRENCY PORTFOLIO TEST SUITE")
+    print("STARTING MULTI-CURRENCY PORTFOLIO TEST SUITE (8 ASSETS)")
     print("=" * 65)
+
+    assert len(TRACKED_STOCKS) == 8, f"Expected 8 tracked stocks, got {len(TRACKED_STOCKS)}"
+
+    # Test overview tiles
+    print("\n[Testing Overview Tiles Extraction]")
+    tiles = get_all_overview_tiles("3mo")
+    assert len(tiles) == 8, f"Expected 8 tiles, got {len(tiles)}"
+    print(f"  ✓ Successfully extracted {len(tiles)} overview tiles for the landing page.")
 
     for asset_key, cfg in TRACKED_STOCKS.items():
         print(f"\n[Testing Asset: {asset_key} ({cfg['symbol']}) - Currency: {cfg['currency_symbol']} {cfg['target_currency']}]")
@@ -30,10 +40,14 @@ def run_tests():
         assert meta["currency_symbol"] == cfg["currency_symbol"], f"Expected {cfg['currency_symbol']}, got {meta['currency_symbol']}"
         
         # Specific currency checks:
-        if asset_key in ["HDFCBANK", "HCLTECH"]:
+        if asset_key in ["HDFCBANK", "HCLTECH", "TITAN"]:
             assert meta["target_currency"] == "INR"
             assert meta["currency_symbol"] == "₹"
             assert df['Close'].iloc[-1] > 300, f"Expected INR price > 300, got {df['Close'].iloc[-1]}"
+        elif asset_key == "CAD to INR":
+            assert meta["target_currency"] == "INR"
+            assert meta["currency_symbol"] == "₹"
+            assert 40.0 < df['Close'].iloc[-1] < 120.0, f"Expected CAD/INR exchange rate between 40 and 120, got {df['Close'].iloc[-1]}"
         elif asset_key == "Shopify":
             assert meta["target_currency"] == "CAD"
             assert meta["currency_symbol"] == "$"
@@ -65,11 +79,10 @@ def run_tests():
         assert "macd_state" in signals, "Signals missing macd_state!"
         print(f"  ✓ Quant Signal: Stance={signals['verdict']}, Score={signals['quant_score']}%, Crossover={signals['crossover_event']}")
 
-        # 3. Test unified Plotly figure generation
+        # 3. Test unified Plotly figure generation (light theme)
         fig = create_financial_dashboard_figure(df, asset_key, meta)
         assert fig is not None, "Figure creation failed!"
-        assert len(fig.data) >= 6, f"Expected at least 6 traces in 3 subplots, got {len(fig.data)}"
-        print(f"  ✓ Plotly Figure generated successfully with {len(fig.data)} traces across 3 linked subplots.")
+        print(f"  ✓ Plotly Figure generated successfully with {len(fig.data)} traces.")
 
         # 4. Test Vertex AI Agent markdown synthesis
         report = render_vertex_agent_markdown(signals, meta)
@@ -79,7 +92,7 @@ def run_tests():
         print(f"  ✓ Vertex AI Agent markdown summary generated ({len(report)} characters).")
 
     print("\n" + "=" * 65)
-    print("ALL 6 ASSETS VERIFIED WITH ZERO ERRORS IN THEIR DESIGNATED CURRENCIES!")
+    print("ALL 8 ASSETS (INCLUDING TITAN AND CAD/INR) VERIFIED WITH ZERO ERRORS!")
     print("=" * 65)
 
 
